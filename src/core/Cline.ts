@@ -631,7 +631,7 @@ export class Cline {
 
 		let newUserContent: UserContent = [...modifiedOldUserContent]
 
-		const agoText = (() => {
+		const agoText = ((): string => {
 			const timestamp = lastClineMessage?.ts ?? Date.now()
 			const now = Date.now()
 			const diff = now - timestamp
@@ -996,7 +996,7 @@ export class Cline {
 				break
 			}
 			case "tool_use":
-				const toolDescription = () => {
+				const toolDescription = (): string => {
 					switch (block.name) {
 						case "execute_command":
 							return `[${block.name} for '${block.params.command}']`
@@ -1010,7 +1010,7 @@ export class Cline {
 							return `[${block.name} for '${block.params.regex}'${
 								block.params.file_pattern ? ` in '${block.params.file_pattern}'` : ""
 							}]`
-						case "insert_code_block":
+						case "insert_content":
 							return `[${block.name} for '${block.params.path}']`
 						case "search_and_replace":
 							return `[${block.name} for '${block.params.path}']`
@@ -1030,6 +1030,12 @@ export class Cline {
 							return `[${block.name}]`
 						case "switch_mode":
 							return `[${block.name} to '${block.params.mode_slug}'${block.params.reason ? ` because: ${block.params.reason}` : ""}]`
+						case "new_task": {
+							const mode = block.params.mode ?? defaultModeSlug
+							const message = block.params.message ?? "(no message)"
+							const modeName = getModeBySlug(mode, customModes)?.name ?? mode
+							return `[${block.name} in ${modeName} mode: '${message}']`
+						}
 					}
 				}
 
@@ -1486,7 +1492,7 @@ export class Cline {
 						}
 					}
 
-					case "insert_code_block": {
+					case "insert_content": {
 						const relPath: string | undefined = block.params.path
 						const operations: string | undefined = block.params.operations
 
@@ -1505,15 +1511,13 @@ export class Cline {
 							// Validate required parameters
 							if (!relPath) {
 								this.consecutiveMistakeCount++
-								pushToolResult(await this.sayAndCreateMissingParamError("insert_code_block", "path"))
+								pushToolResult(await this.sayAndCreateMissingParamError("insert_content", "path"))
 								break
 							}
 
 							if (!operations) {
 								this.consecutiveMistakeCount++
-								pushToolResult(
-									await this.sayAndCreateMissingParamError("insert_code_block", "operations"),
-								)
+								pushToolResult(await this.sayAndCreateMissingParamError("insert_content", "operations"))
 								break
 							}
 
@@ -1603,7 +1607,7 @@ export class Cline {
 
 							if (!userEdits) {
 								pushToolResult(
-									`The code block was successfully inserted in ${relPath.toPosix()}.${newProblemsMessage}`,
+									`The content was successfully inserted in ${relPath.toPosix()}.${newProblemsMessage}`,
 								)
 								await this.diffViewProvider.reset()
 								break
@@ -1629,7 +1633,7 @@ export class Cline {
 							)
 							await this.diffViewProvider.reset()
 						} catch (error) {
-							handleError("insert block", error)
+							handleError("insert content", error)
 							await this.diffViewProvider.reset()
 						}
 						break
@@ -2404,6 +2408,74 @@ export class Cline {
 						}
 					}
 
+					case "new_task": {
+						const mode: string | undefined = block.params.mode
+						const message: string | undefined = block.params.message
+						try {
+							if (block.partial) {
+								const partialMessage = JSON.stringify({
+									tool: "newTask",
+									mode: removeClosingTag("mode", mode),
+									message: removeClosingTag("message", message),
+								})
+								await this.ask("tool", partialMessage, block.partial).catch(() => {})
+								break
+							} else {
+								if (!mode) {
+									this.consecutiveMistakeCount++
+									pushToolResult(await this.sayAndCreateMissingParamError("new_task", "mode"))
+									break
+								}
+								if (!message) {
+									this.consecutiveMistakeCount++
+									pushToolResult(await this.sayAndCreateMissingParamError("new_task", "message"))
+									break
+								}
+								this.consecutiveMistakeCount = 0
+
+								// Verify the mode exists
+								const targetMode = getModeBySlug(
+									mode,
+									(await this.providerRef.deref()?.getState())?.customModes,
+								)
+								if (!targetMode) {
+									pushToolResult(formatResponse.toolError(`Invalid mode: ${mode}`))
+									break
+								}
+
+								// Show what we're about to do
+								const toolMessage = JSON.stringify({
+									tool: "newTask",
+									mode: targetMode.name,
+									content: message,
+								})
+
+								const didApprove = await askApproval("tool", toolMessage)
+								if (!didApprove) {
+									break
+								}
+
+								// Switch mode first, then create new task instance
+								const provider = this.providerRef.deref()
+								if (provider) {
+									await provider.handleModeSwitch(mode)
+									await provider.initClineWithTask(message)
+									pushToolResult(
+										`Successfully created new task in ${targetMode.name} mode with message: ${message}`,
+									)
+								} else {
+									pushToolResult(
+										formatResponse.toolError("Failed to create new task: provider not available"),
+									)
+								}
+								break
+							}
+						} catch (error) {
+							await handleError("creating new task", error)
+							break
+						}
+					}
+
 					case "attempt_completion": {
 						/*
 						this.consecutiveMistakeCount = 0
@@ -3040,6 +3112,14 @@ export class Cline {
 		const timeZoneOffset = -now.getTimezoneOffset() / 60 // Convert to hours and invert sign to match conventional notation
 		const timeZoneOffsetStr = `${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}:00`
 		details += `\n\n# Current Time\n${formatter.format(now)} (${timeZone}, UTC${timeZoneOffsetStr})`
+
+		// Add context tokens information
+		const { contextTokens } = getApiMetrics(this.clineMessages)
+		const modelInfo = this.api.getModel().info
+		const contextWindow = modelInfo.contextWindow
+		const contextPercentage =
+			contextTokens && contextWindow ? Math.round((contextTokens / contextWindow) * 100) : undefined
+		details += `\n\n# Current Context Size (Tokens)\n${contextTokens ? `${contextTokens.toLocaleString()} (${contextPercentage}%)` : "(Not available)"}`
 
 		// Add current mode and any mode-specific warnings
 		const { mode, customModes } = (await this.providerRef.deref()?.getState()) ?? {}

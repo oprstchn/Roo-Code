@@ -13,7 +13,7 @@ export const toolUseNames = [
 	"read_file",
 	"write_to_file",
 	"apply_diff",
-	"insert_code_block",
+	"insert_content",
 	"search_and_replace",
 	"search_files",
 	"list_files",
@@ -24,6 +24,7 @@ export const toolUseNames = [
 	"ask_followup_question",
 	"attempt_completion",
 	"switch_mode",
+	"new_task",
 ] as const
 
 // Converts array of tool call names into a union type ("execute_command" | "read_file" | ...)
@@ -53,6 +54,8 @@ export const toolParamNames = [
 	"mode_slug",
 	"reason",
 	"operations",
+	"mode",
+	"message",
 ] as const
 
 export type ToolParamName = (typeof toolParamNames)[number]
@@ -82,7 +85,7 @@ export interface WriteToFileToolUse extends ToolUse {
 }
 
 export interface InsertCodeBlockToolUse extends ToolUse {
-	name: "insert_code_block"
+	name: "insert_content"
 	params: Partial<Pick<Record<ToolParamName, string>, "path" | "operations">>
 }
 
@@ -129,4 +132,9 @@ export interface AttemptCompletionToolUse extends ToolUse {
 export interface SwitchModeToolUse extends ToolUse {
 	name: "switch_mode"
 	params: Partial<Pick<Record<ToolParamName, string>, "mode_slug" | "reason">>
+}
+
+export interface NewTaskToolUse extends ToolUse {
+	name: "new_task"
+	params: Partial<Pick<Record<ToolParamName, string>, "mode" | "message">>
 }
