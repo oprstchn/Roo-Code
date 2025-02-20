@@ -47,21 +47,12 @@ export const GetStarted = () => {
 		formState: { errors },
 	} = form
 
-	const onSubmit = useCallback(
-		(data: ResearchSession) => {
-			// This is the only value we care to persist for now.
-			setProviderValue("firecrawlApiKey", data.firecrawlApiKey)
-			setSession(data)
-		},
-		[setSession, setProviderValue],
-	)
+	const onSubmit = useCallback((data: ResearchSession) => setSession(data), [setSession])
 
 	useEffect(() => {
-		const isProviderValid = provider?.providerId && provider?.providerApiKey && provider?.firecrawlApiKey
 		setValue("providerId", provider?.providerId ?? ProviderId.OpenRouter)
 		setValue("providerApiKey", provider?.providerApiKey ?? "")
 		setValue("firecrawlApiKey", provider?.firecrawlApiKey ?? "")
-		setIsProvidersOpen(!isProviderValid)
 	}, [provider, setValue])
 
 	useEffect(() => {
@@ -127,6 +118,7 @@ export const GetStarted = () => {
 													type="password"
 													placeholder="fc-..."
 													className="flex-1"
+													onBlur={() => setProviderValue("firecrawlApiKey", field.value)}
 												/>
 												<div className="flex flex-row items-center justify-between gap-2">
 													<div className="text-muted-foreground">
