@@ -99,7 +99,7 @@ function ChatMessageActions() {
 	)
 }
 
-export function ChatMessageLoading({ message = "asdf" }: { message?: string }) {
+export function ChatMessageLoading({ message = "Loading..." }: { message?: string }) {
 	return (
 		<div className="flex flex-row items-center justify-center p-5">
 			<Loader2 className="h-4 w-4 animate-spin opacity-25" />
