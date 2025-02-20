@@ -82,7 +82,7 @@ export function DeepResearchProvider({ children }: { children: ReactNode }) {
 					if (result.success) {
 						const { isLoading, message } = result.data
 						setIsLoading(isLoading)
-						setLoadingMessage?.(message ?? "")
+						setLoadingMessage(message ?? "")
 					} else {
 						console.warn(`[DeepResearch#onMessage] Invalid ${type}: ${text}: ${result.error}`)
 					}
